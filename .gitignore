@@ -1,0 +1,16 @@
+# 只公開學員需要的檔案，其餘一律不進版控
+/*
+!/.gitignore
+!/README.md
+!/pyproject.toml
+!/uv.lock
+!/RUNBOOK_TEMPLATE.md
+!/course_agents/
+!/docs/
+/docs/*
+!/docs/課前準備.md
+!/docs/學員版實作講義.md
+
+.env
+.venv/
+__pycache__/

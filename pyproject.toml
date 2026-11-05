@@ -1,0 +1,6 @@
+[project]
+name = "gdgc-course"
+version = "0.1.0"
+description = "GDGC 入門課學員實作：本機 ADK Web 跑 hello_agent，並交給 Claude Code 部署到 Agent Runtime"
+requires-python = ">=3.11,<3.14"
+dependencies = ["google-adk>=2.5.0,<3.0.0"]
