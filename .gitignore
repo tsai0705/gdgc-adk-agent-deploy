@@ -12,5 +12,6 @@
 !/docs/學員版實作講義.md
 
 .env
+.adk/
 .venv/
 __pycache__/
