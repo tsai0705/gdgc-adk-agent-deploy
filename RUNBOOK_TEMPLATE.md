@@ -12,7 +12,7 @@
 ## 範圍
 
 - 只部署 `course_agents/hello_agent`，目標是使用者自己的 GCP project 的 Agent Runtime（舊名 Vertex AI Agent Engine）。
-- 可以新增部署所需檔案（見「補部署骨架」）。
+- 部署所需檔案只能新增在部署資料夾 `.scratch/deploy/`（見「補部署骨架：部署資料夾」），除了 `RUNBOOK.md`，專案本體不得新增或修改任何檔案。
 - 不得修改 agent 的 `description` 與 `instruction`。
 - 不得修改 `.env`，也不得讀出或印出其內容。
 
@@ -35,22 +35,35 @@
 
 1. **確認 project ID 與帳單**：請使用者提供 project ID，AI 檢查帳單已啟用。這一步必須等人回覆確認才能往下。
 2. **啟用必要 API**：逐一列出要啟用的 API 與理由。哪些 API 是必要的若不確定，標註「需查證」，查官方文件後再寫入。
-3. **補部署骨架**：缺的檔案由 AI 依官方文件與下方已知事項產生，內容寫進 RUNBOOK 的對應步驟。
-4. **本機檢查**：部署前先確認 agent 能在本機載入（例如 import 檢查或 `adk` 指令），並列出打包會包含哪些檔案。
+3. **補部署骨架**：依下方「補部署骨架：部署資料夾」的規定，在部署資料夾用官方工具產生骨架。
+4. **本機檢查**：部署前先確認 agent 與 `fast_api_app` 都能在本機載入（import 檢查），並列出打包會包含哪些檔案。
 5. **部署**：使用下方「硬性費用防線」規定的旗標。
 6. **查進度**：部署指令回傳後，用狀態查詢指令確認結果。
 7. **雲端驗證**：對已部署的 Runtime 問一題，必須收到有內容的回答才算成功。
 8. **清理**：刪除本次建立的 Agent Runtime。
 9. **確認清理**：執行驗證指令，並提醒使用者自己到 Console 確認 Agent Runtime 列表是空的（人做）。
 
-### 補部署骨架：參考清單
+### 補部署骨架：部署資料夾（必須遵守）
 
-以下為另一個已成功部署的專案所需的骨架，供你比對，實際內容仍須查官方文件：
+`agents-cli scaffold enhance` 會改寫所在目錄，所以骨架一律在專案內的部署資料夾 `.scratch/deploy/` 產生，部署相關的所有指令也都在那裡執行：
 
-- `agents-cli-manifest.yaml`（deployment_target 為 agent_runtime）
-- `Dockerfile`
-- `app/fast_api_app.py` 與 `app/app_utils/`
-- `.gcloudignore`：**必須存在**。缺少時打包會退回使用 `.gitignore`，可能漏檔或夾帶不該上傳的檔案。同時確認 `.env` 不會被打包上傳。
+- 部署資料夾只放三樣東西：`hello_agent/`（只複製 `agent.py` 與 `__init__.py`，**不得複製 `.env`**）、`pyproject.toml`、`uv.lock`。部署資料夾已存在時，停下來問人，不得自行刪除。
+- **禁止在專案根目錄執行 `scaffold enhance`**。實測在根目錄跑 `scaffold enhance .`，它會把專案當成範本，逐項刪除專案內容再寫回。
+- `--agent-directory` 只接受單層名稱，要用 `hello_agent`。巢狀路徑 `course_agents/hello_agent` 會報 `is not a valid Python identifier`。
+- enhance 後要驗證專案本體沒被改動：記錄 enhance 前後專案檔案的 checksum 與 `git status`，兩者必須相同。
+- enhance 會在 `hello_agent/agent.py` 檔尾加上 `app = App(...)`，這可以接受。`description` 與 `instruction` 不得被改。
+- 中文 Windows 上，enhance 加依賴時可能出現 `UnicodeDecodeError: 'cp950' codec can't decode ...`，後面的依賴也就沒裝上。所以本機檢查一定要 import `hello_agent.fast_api_app`。出現 `No module named 'vertexai'` 時，在部署資料夾補裝下面三個套件（版本下限取自 agents-cli 1.3.1 範本，已實測可用）：
+  ```bash
+  PYTHONUTF8=1 uv add "google-cloud-aiplatform[agent-engines]>=1.156.0" "google-cloud-logging>=3.12.0,<4.0.0" "protobuf>=6.31.1,<7.0.0"
+  ```
+
+enhance 實測會產生的骨架（供比對）：
+
+- `agents-cli-manifest.yaml`（`deployment_target: "agent_runtime"`）
+- `Dockerfile`（`COPY ./hello_agent`，`CMD` 指向 `hello_agent.fast_api_app:app`）
+- `hello_agent/fast_api_app.py` 與 `hello_agent/app_utils/`
+- `deployment_metadata.json`（資源 ID 是字串 `"None"`，不影響第一次部署，部署成功後會被覆寫）
+- `.gcloudignore`：enhance 不會產生，**必須自己建立**。部署資料夾沒有 `.gitignore`，缺少 `.gcloudignore` 時可能夾帶不該上傳的檔案。一定要排除 `.env`、`.env.*`、`.venv/`、`.adk/`、`__pycache__/`、`deployment_metadata.json`。
 
 ## 硬性費用防線
 
@@ -74,19 +87,30 @@
 
 ## 已知坑（給 AI 的提示）
 
-來自另一個已成功部署的專案，寫 RUNBOOK 時請納入對應的驗證或失敗處置：
+來自 2026-11-12 本課程的實測，以及另一個已成功部署的專案。寫 RUNBOOK 時請納入對應的驗證或失敗處置：
 
-- 參考專案使用的部署形式為 `uvx google-agents-cli deploy --project <id> --region <region> --no-confirm-project --no-wait --min-instances 0 --update-env-vars "..."`，文件釘版 `google-agents-cli@1.3.1`。版本與旗標在本課程使用前需再查證。
+- 實測可用的部署形式：`uvx google-agents-cli@1.3.1 deploy --project <id> --region us-central1 --service-name <名稱> --no-confirm-project --no-wait --min-instances 0 --max-instances 1 --update-env-vars "GOOGLE_GENAI_USE_VERTEXAI=true,GOOGLE_CLOUD_LOCATION=global"`。課程釘版 `google-agents-cli@1.3.1`，已有更新版本，但沒有測過，不要自行升級。
+- 所有 `uvx google-agents-cli` 指令前面加 `PYTHONUTF8=1`，用來避開中文 Windows 的 cp950 解碼錯誤（是否完全有效未驗證）。
+- 第一次執行 `uvx google-agents-cli` 要下載上百 MB，可能超過 20 分鐘。指令逾時不代表失敗，等它跑完再判斷。
+- `deploy --dry-run` 只會印出 project、region、cpu、memory、min／max instances，不會印出 `--service-name` 與 `--update-env-vars`。這兩項到真正部署時的輸出才能確認。
+- 資源路徑用的是 project **編號**（例如 `projects/123456789012/locations/...`），不是 project ID。刪除前用 `gcloud projects describe <id> --format="value(projectNumber)"` 對照。
+- 實測部署約 4 分 30 秒完成。
 - 部署失敗時常只回傳 code 13，且資源會自動刪除，看不到原因。加 `--no-wait`，再用 `deploy --status` 查詳細結果。
 - `--update-env-vars` 的值不可含逗號。
 - 使用者若用 Git Bash，指令前要加 `MSYS_NO_PATHCONV=1` 當前綴（只加在該指令前，不可全域 export），否則資源路徑會被轉成 Windows 路徑。
 - 啟動 log 內 cloudresourcemanager 的 403 traceback 不是致命錯誤，不要因此判定失敗，以部署狀態與雲端驗證為準。
 - 模型區域用 `us-central1` 可能出現 404，參考專案改用 `global`。遇到 404 時先檢查模型區域設定。
-- 雲端驗證可用 `agents-cli run --url <engine resource> --mode adk "問題"`（需查證是否適用於目前版本）。
+- 雲端驗證用 `agents-cli run --url https://us-central1-aiplatform.googleapis.com/v1/<資源路徑> --mode adk "問題"`，1.3.1 實測可用。資源路徑從部署資料夾的 `deployment_metadata.json` 的 `remote_agent_runtime_id` 讀取。
 
 ## 清理方式
 
-- Agent Runtime 的刪除方式，請你查官方文件，把「刪除指令」與「驗證已刪除的指令」寫進 RUNBOOK。
-- 只確認過可在 Console 刪除。CLI 與 SDK 的刪除方式未查證，找不到可靠的官方說法時，就寫 Console 的操作步驟，並標為「人做」。
-- 清理只限本次建立的資源。
+- 用 REST API 刪除，網址**必須加 `?force=true`**。雲端驗證一定會建立 session，不加 `force` 會回 `FAILED_PRECONDITION`（`contains child resources: sessions`）。實測可用的指令（在部署資料夾執行）：
+  ```bash
+  RESOURCE=$(uv run python -c "import json; print(json.load(open('deployment_metadata.json'))['remote_agent_runtime_id'])") && MSYS_NO_PATHCONV=1 curl -s -X DELETE -H "Authorization: Bearer $(gcloud auth print-access-token)" "https://us-central1-aiplatform.googleapis.com/v1/$RESOURCE?force=true"
+  ```
+  回應含 `"done": true` 算成功。
+- 刪除前先確認資源的顯示名稱是本次的 `--service-name`、project 編號與使用者的 project 相符，不符就停下來。
+- 驗證已刪除：對同一個資源網址 GET，預期回 `404 NOT_FOUND`；列出 `.../projects/<id>/locations/us-central1/reasoningEngines`，預期沒有本次的名稱。
+- REST 刪除失敗時，改請使用者到 Console 刪除，並標為「人做」。
+- 清理只限本次建立的資源。確認清理完成前，不得刪除部署資料夾，清理要靠裡面的 `deployment_metadata.json`。
 - 清理完成後，提醒使用者到 Console 確認 Agent Runtime 列表是空的。
